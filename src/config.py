@@ -60,20 +60,6 @@ ALLOWED_TYPES: Final[tuple[str, ...]] = (
 )
 
 
-# ---------------------------------------------------------------------------
-# 3.  FORMATS PER TYPE
-# ---------------------------------------------------------------------------
-# Formats are ONLY meaningful for the four types below. For every other type,
-# the suggested format must be None.
-#
-# Notation reference (this is the human-facing label we return, NOT a strptime
-# string — features.py / the format detector maps these to actual parsers):
-#   YYYY = 4-digit year   YY = 2-digit year
-#   MM   = 2-digit month  MMM = 3-letter month (Jan)
-#   DD   = 2-digit day
-#   HH   = 24-hour hour   hh = 12-hour hour    A = AM/PM
-#   mm   = minutes        ss = seconds         Z = trailing UTC marker
-
 DATE_FORMATS: Final[tuple[str, ...]] = (
     "YYYY-MM-DD",
     "DD/MM/YYYY",
