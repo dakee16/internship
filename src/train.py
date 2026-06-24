@@ -11,10 +11,12 @@ from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.utils.class_weight import compute_sample_weight
+from xgboost import XGBClassifier
 
 sys.path.insert(0, os.path.dirname(__file__))
-import config  
-import features as F
+import config  # noqa: E402
+import features as F  # noqa: E402
+
 
 try:
     from xgboost import XGBClassifier
@@ -23,21 +25,22 @@ try:
 except ImportError:
     XGBOOST_AVAILABLE = False
 
-
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_PATH = os.path.join(_REPO_ROOT, "data", "labeled_columns.json")
 MODEL_PATH = os.path.join(_REPO_ROOT, config.MODEL_FILENAME)
 FEATURE_CACHE = os.path.join(_REPO_ROOT, "data", "features.npz")
 
+
 TEST_SIZE: float = 0.2
+
 
 RF_N_ESTIMATORS: int = 300
 RF_MAX_DEPTH: int | None = None
 
+
 XGB_N_ESTIMATORS: int = 300
 XGB_MAX_DEPTH: int = 8
 XGB_LEARNING_RATE: float = 0.1
-
 
 def load_dataset(path: str = DATA_PATH) -> list[dict]:
     if not os.path.exists(path):
@@ -59,6 +62,8 @@ def build_feature_matrix(
         rows.append(vec)
         labels.append(col["type"])
     return np.asarray(rows, dtype=float), np.asarray(labels, dtype=object)
+
+
 
 
 def train_random_forest(
@@ -96,7 +101,6 @@ def evaluate(model, x_test: np.ndarray, y_test: np.ndarray) -> dict[str, float]:
         "accuracy": float(accuracy_score(y_test, preds)),
         "macro_f1": float(f1_score(y_test, preds, average="macro")),
     }
-
 
 def main() -> None:
     print("Loading dataset...")

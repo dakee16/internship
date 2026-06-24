@@ -16,10 +16,12 @@ RE_BOOLEAN = re.compile(r"^(true|false|yes|no|y|n|0|1)$", re.IGNORECASE)
 RE_IPV4 = re.compile(r"^(\d{1,3}\.){3}\d{1,3}(/\d{1,2})?$")
 RE_IPV6 = re.compile(r"^[0-9A-Fa-f:]+:[0-9A-Fa-f:]+(/\d{1,3})?$")
 RE_TIME = re.compile(r"^\d{1,2}:\d{2}(:\d{2})?(\s?[APap][Mm])?$")
+
 RE_DATE_LIKE = re.compile(
     r"^(\d{1,4}[/\-.]\d{1,2}[/\-.]\d{1,4}"
     r"|\d{1,2}[/\-.][A-Za-z]{3}[/\-.]\d{2,4})$"
 )
+
 RE_DATETIME_LIKE = re.compile(
     r"^\d{1,4}[/\-.]\d{1,2}[/\-.]\d{1,4}[ T]\d{1,2}:\d{2}(:\d{2})?Z?$"
 )
@@ -72,8 +74,6 @@ FEATURE_NAMES: tuple[str, ...] = (
     "name_has_flag",
 )
 
-
-
 def _clean_values(values: Iterable) -> pd.Series:
     s = pd.Series(list(values), dtype="object")
     s = s.dropna().astype(str).str.strip()
@@ -121,7 +121,6 @@ def extract_features(name: str, values: Iterable) -> dict[str, float]:
 
     feats: dict[str, float] = {}
 
-    # --- regex match-ratios ---
     feats["ratio_email"] = _match_ratio(clean, RE_EMAIL)
     feats["ratio_integer"] = _match_ratio(clean, RE_INTEGER)
     feats["ratio_decimal"] = _match_ratio(clean, RE_DECIMAL)
@@ -132,7 +131,6 @@ def extract_features(name: str, values: Iterable) -> dict[str, float]:
     feats["ratio_date_like"] = _match_ratio(clean, RE_DATE_LIKE)
     feats["ratio_datetime_like"] = _match_ratio(clean, RE_DATETIME_LIKE)
 
-    # --- statistical features ---
     if n_clean > 0:
         lengths = clean.str.len().to_numpy(dtype=float)
         feats["avg_length"] = float(np.mean(lengths))
@@ -159,7 +157,6 @@ def extract_features(name: str, values: Iterable) -> dict[str, float]:
     feats["ratio_has_at"] = _char_presence_ratio(clean, "@")
     feats["ratio_has_space"] = _char_presence_ratio(clean, " ")
 
-    # --- column-name signals ---
     name_lower = (name or "").lower()
     for feat_name, tokens in NAME_SIGNALS.items():
         feats[feat_name] = 1.0 if any(tok in name_lower for tok in tokens) else 0.0

@@ -1,21 +1,3 @@
-"""
-tests/test_suggester.py
------------------------
-pytest suite for the Column Type & Format Suggester.
-
-Coverage (per the spec):
-    1. Type mapping          — each of the 10 types detected correctly
-    2. Format parsers        — each date / datetime / time / ip format
-    3. Disambiguation rules  — especially day > 12 / month > 12
-    4. Model tie-breaker     — ambiguous 0/1 columns route to the model
-    5. Validator             — rejects out-of-set type / format values
-    6. Confidence contract   — confidence always in [0.0, 1.0]
-    7. Edge cases            — empty columns, nulls, single-value columns
-
-Run from the project root:
-    pytest tests/ -v
-"""
-
 from __future__ import annotations
 
 import sys
@@ -24,11 +6,10 @@ import os
 import pandas as pd
 import pytest
 
-# Make src/ importable from the project root.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from src import config
-from type_format_suggester import (  # type: ignore[attr-defined]
+from type_format_suggester import (  # type: ignore
     detect_format,
     rule_based_type,
     suggest,
@@ -37,12 +18,7 @@ from type_format_suggester import (  # type: ignore[attr-defined]
 )
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def col(name: str, values: list) -> pd.Series:
-    """Convenience: build a named Series."""
     return pd.Series(values, name=name)
 
 
@@ -53,7 +29,6 @@ def assert_suggestion(
     expected_format: str | None = None,
     min_confidence: float = 0.70,
 ) -> dict:
-    """Run suggest() and assert type, format, and minimum confidence."""
     result = suggest(col(name, values))
     assert result["type"] == expected_type, (
         f"[{name}] type: got {result['type']!r}, expected {expected_type!r}"
@@ -69,10 +44,6 @@ def assert_suggestion(
     )
     return result
 
-
-# ---------------------------------------------------------------------------
-# 1. TYPE MAPPING — each of the 10 allowed types
-# ---------------------------------------------------------------------------
 
 class TestTypeMapping:
     """Every type must be detectable and must appear in ALLOWED_TYPES."""
@@ -170,7 +141,6 @@ class TestTypeMapping:
         assert result["type"] == config.TYPE_NOT_APPLICABLE
 
     def test_all_types_in_allowed(self):
-        """Whatever suggest() returns must always be an allowed type."""
         test_columns = [
             col("e", ["a@b.com"] * 5),
             col("d", ["2026-01-01"] * 5),
@@ -184,10 +154,6 @@ class TestTypeMapping:
                 f"suggest() returned unknown type: {r['type']!r}"
             )
 
-
-# ---------------------------------------------------------------------------
-# 2. FORMAT PARSERS — each date / datetime / time / IP format
-# ---------------------------------------------------------------------------
 
 class TestDateFormats:
     """Every allowed date format must be detected correctly."""
@@ -287,22 +253,10 @@ class TestIPFormats:
             f"Expected format {fmt!r}, got {result['format']!r}"
         )
 
-
-# ---------------------------------------------------------------------------
-# 3. DISAMBIGUATION RULES — the spec's explicit requirement
-# ---------------------------------------------------------------------------
-
 class TestDateDisambiguation:
-    """
-    The cross-column disambiguation rules are the centrepiece of Stage 2.
-    The spec calls these out explicitly: "first number > 12 => eliminate
-    month-first formats".
-    """
-
     def test_day_gt_12_eliminates_month_first(self):
-        """A day > 12 in the first position MUST resolve to DD/MM/YYYY."""
         result = suggest(col("d", [
-            "16/04/2026",   # 16 > 12 => first component is a DAY
+            "16/04/2026",
             "25/12/2025",
             "30/03/2024",
             "14/07/2023",
@@ -317,9 +271,8 @@ class TestDateDisambiguation:
         )
 
     def test_month_gt_12_second_position_eliminates_day_first(self):
-        """A value > 12 in second position means second is a DAY => MM/DD."""
         result = suggest(col("d", [
-            "04/16/2026",   # 16 > 12 => second component is the DAY
+            "04/16/2026",
             "12/25/2025",
             "03/30/2024",
             "07/14/2023",
@@ -339,7 +292,7 @@ class TestDateDisambiguation:
           - lower confidence by AMBIGUOUS_FORMAT_CONFIDENCE_PENALTY
         """
         result = suggest(col("d", [
-            "01/02/2026",   # both 01 and 02 <= 12 — truly ambiguous
+            "01/02/2026",
             "03/04/2025",
             "05/06/2024",
             "07/08/2023",
@@ -349,14 +302,12 @@ class TestDateDisambiguation:
         assert result["format"] == "DD/MM/YYYY", (
             "Unresolvable date must fall back to the DD/MM/YYYY prior"
         )
-        # Confidence must be LOWER than a clean resolvable date.
         assert result["confidence"] < 0.90, (
             f"Unresolvable date confidence {result['confidence']} should be "
             f"lower than 0.90 to reflect the uncertainty"
         )
 
     def test_iso_date_unambiguous(self):
-        """YYYY-MM-DD has no day/month ordering ambiguity."""
         result = suggest(col("d", [
             "2026-04-16", "2025-12-25", "2024-03-30", "2023-07-04",
         ]))
@@ -365,38 +316,19 @@ class TestDateDisambiguation:
         assert result["confidence"] >= 0.90
 
     def test_ipv4_cidr_slash_present(self):
-        """Presence of '/' in all values must resolve to CIDR variant."""
         result = suggest(col("subnet", [
             "10.0.0.0/24", "192.168.1.0/16", "172.16.0.0/12",
         ]))
         assert result["format"] == "IPv4 CIDR"
 
     def test_ipv6_colon_present(self):
-        """Presence of ':' in values must resolve to IPv6."""
         result = suggest(col("ip6", [
             "2001:db8::1", "fe80::1", "::1", "2001:db8::2",
         ]))
         assert result["format"] in ("IPv6", "IPv6 CIDR")
 
-
-# ---------------------------------------------------------------------------
-# 4. MODEL TIE-BREAKER PATH
-# ---------------------------------------------------------------------------
-
 class TestModelTieBreaker:
-    """
-    Columns that are genuinely ambiguous to the rule tier must fall through to
-    the model. The key case: 0/1 values are ambiguous between true_false and
-    whole_number — no rule can decide, so the model arbitrates.
-    """
-
     def test_binary_column_routes_to_model(self):
-        """
-        A 0/1 column bypasses the rule tier (bare 0/1 is not in _BOOL_WORDS)
-        and reaches the model. The model must return either true_false or
-        whole_number (both are valid — the model picks based on the name/prior).
-        Either way, confidence must be < 1.0 to reflect genuine uncertainty.
-        """
         result = suggest(col("flag", ["0", "1", "1", "0", "1", "0", "0", "1", "1", "0"]))
         assert result["type"] in (config.TYPE_TRUE_FALSE, config.TYPE_WHOLE_NUMBER), (
             f"0/1 column must resolve to true_false or whole_number, "
@@ -407,18 +339,11 @@ class TestModelTieBreaker:
         )
 
     def test_named_flag_column_leans_true_false(self):
-        """
-        The column NAME is a weak signal. A column named 'is_active' with 0/1
-        values should lean true_false over whole_number, though the model
-        decides and confidence should reflect some uncertainty.
-        """
         result = suggest(col("is_active", ["0", "1", "1", "0", "1", "0", "0", "1"]))
-        # Name signal should tip the model toward true_false.
         assert result["type"] == config.TYPE_TRUE_FALSE
         assert result["confidence"] < 1.0
 
     def test_model_confidence_in_range(self):
-        """Model-produced confidence must stay in [0, 1]."""
         for values in [
             ["0", "1", "0", "1", "1", "0"],
             ["42", "17", "8", "200", "3", "91"],
@@ -428,16 +353,8 @@ class TestModelTieBreaker:
             assert config.CONFIDENCE_MIN <= result["confidence"] <= config.CONFIDENCE_MAX
 
 
-# ---------------------------------------------------------------------------
-# 5. VALIDATOR — must reject out-of-set values
-# ---------------------------------------------------------------------------
 
 class TestValidator:
-    """
-    Stage 3 must enforce the output contract. Out-of-set type or format =>
-    confidence forced to 0.0. We never return an unknown type or format.
-    """
-
     def test_valid_type_no_format(self):
         assert validate(config.TYPE_TEXT, None) is True
 
@@ -457,26 +374,17 @@ class TestValidator:
         assert validate(config.TYPE_IP_ADDRESS, "IPv5") is False
 
     def test_format_none_for_non_temporal(self):
-        """Types that don't need a format must have format=None."""
         assert validate(config.TYPE_TEXT, None) is True
         assert validate(config.TYPE_TEXT, "DD/MM/YYYY") is False   # text has no format
         assert validate(config.TYPE_EMAIL, None) is True
         assert validate(config.TYPE_WHOLE_NUMBER, "YYYY-MM-DD") is False
 
     def test_temporal_type_requires_format(self):
-        """Temporal/IP types must have a non-None format from their list."""
         assert validate(config.TYPE_DATE, None) is False
         assert validate(config.TYPE_TIME, None) is False
         assert validate(config.TYPE_IP_ADDRESS, None) is False
 
-
-# ---------------------------------------------------------------------------
-# 6. CONFIDENCE CONTRACT — always in [0.0, 1.0]
-# ---------------------------------------------------------------------------
-
 class TestConfidenceContract:
-    """confidence must be in [0.0, 1.0] for every input, no exceptions."""
-
     @pytest.mark.parametrize("values,name", [
         (["alice@example.com"] * 8,  "email"),
         (["10.0.0.1"] * 8,           "ip"),
@@ -496,13 +404,7 @@ class TestConfidenceContract:
         )
 
 
-# ---------------------------------------------------------------------------
-# 7. EDGE CASES
-# ---------------------------------------------------------------------------
-
 class TestEdgeCases:
-    """Unusual inputs must not raise exceptions and must return valid dicts."""
-
     def test_single_value_column(self):
         """A column with one value must not crash."""
         result = suggest(col("x", ["hello@world.com"]))
@@ -516,34 +418,26 @@ class TestEdgeCases:
         assert result["confidence"] == 1.0
 
     def test_mixed_nulls_and_values(self):
-        """Nulls should be ignored; type detected from non-null values."""
         result = suggest(col("e", [
             "alice@example.com", None, "bob@ey.com", None, "carol@gmail.com",
         ]))
         assert result["type"] == config.TYPE_EMAIL
 
     def test_result_has_required_keys(self):
-        """Output dict must always contain exactly the three spec keys."""
         result = suggest(col("x", ["hello", "world"]))
         assert set(result.keys()) == {"type", "format", "confidence"}
 
     def test_column_without_name(self):
-        """A Series with no name set must not crash."""
         s = pd.Series(["London", "Paris", "Berlin"])
         result = suggest(s)
         assert result["type"] == config.TYPE_TEXT
 
     def test_dirty_email_column(self):
-        """A mostly-valid email column with a few typos still detects as email.
-        
-        1 corrupt value out of 11 = 9% corruption, below our 10% threshold,
-        so the rule tier still fires and returns email.
-        """
         result = suggest(col("email", [
             "alice@example.com",
             "bob@ey.com",
             "carol@gmail.com",
-            "notanemail",          # typo / corrupt value
+            "notanemail",
             "david@outlook.com",
             "eva@startup.io",
             "frank@corp.co",
@@ -555,10 +449,6 @@ class TestEdgeCases:
         assert result["type"] == config.TYPE_EMAIL
 
     def test_rule_tier_returns_none_for_ambiguous(self):
-        """
-        The rule tier must return (None, 0.0) for a numeric column so the
-        model gets to arbitrate — not the rule tier guessing incorrectly.
-        """
         clean = _clean(["42", "17", "8", "200", "3", "91", "55", "12"])
         detected_type, confidence = rule_based_type(clean)
         assert detected_type is None, (

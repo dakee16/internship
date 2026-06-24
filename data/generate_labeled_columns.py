@@ -9,7 +9,7 @@ import sys
 from typing import Callable
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-import config # type: ignore
+from src import config  # noqa: E402
 
 
 COLUMNS_PER_CLASS: int = 200
@@ -75,7 +75,6 @@ def _rand_month(rng: random.Random) -> int:
 
 
 def _fmt_date(fmt: str, y: int, m: int, d: int) -> str:
-    """Render (y, m, d) into one of the human-facing date format labels."""
     yy = y % 100
     mmm = MONTHS_ABBR[m - 1]
     return {
@@ -188,6 +187,7 @@ def _gen_ipv6(rng: random.Random) -> str:
 
 def _gen_ipv6_cidr(rng: random.Random) -> str:
     return f"{_gen_ipv6(rng)}/{rng.randint(16, 128)}"
+
 
 def _maybe_inject_nulls(values: list[str], rng: random.Random) -> list[str]:
     if rng.random() >= NULL_INJECT_PROB:
@@ -303,7 +303,10 @@ def _build_not_applicable_column(rng: random.Random) -> dict:
     }
 
 
-def generate_dataset(columns_per_class: int = COLUMNS_PER_CLASS, seed: int = config.RANDOM_SEED) -> list[dict]:
+def generate_dataset(
+    columns_per_class: int = COLUMNS_PER_CLASS,
+    seed: int = config.RANDOM_SEED,
+) -> list[dict]:
     rng = random.Random(seed)
     dataset: list[dict] = []
 
