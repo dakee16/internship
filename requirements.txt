@@ -1,0 +1,27 @@
+# ---------------------------------------------------------------------------
+# Column Type & Format Suggester — dependencies
+# ---------------------------------------------------------------------------
+# Core packages are pinned to exact, verified versions for reproducibility.
+# After a successful install on your machine, lock the FULL resolved set with:
+#     pip freeze > requirements.lock.txt
+# and commit that alongside this file (the requirements.in / lock pattern).
+# ---------------------------------------------------------------------------
+
+# --- core runtime ---
+numpy==2.4.4
+pandas==3.0.2
+scikit-learn==1.8.0
+joblib==1.5.3
+scipy==1.17.1
+matplotlib>=3.8.0
+
+# --- model (Stage 1 type classifier) ---
+# Pin to the version you install; 2.0+ has the sklearn-compatible API we use.
+xgboost>=2.0.0
+
+# --- testing ---
+pytest>=8.0.0
+
+# --- formatting / linting (project requires black + ruff clean) ---
+black>=24.0.0
+ruff>=0.4.0
